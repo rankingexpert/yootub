@@ -1,0 +1,456 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  username    String   @unique
+  passwordHash String?
+  fullName    String?
+  avatar      String?
+  bio         String?
+  banner      String?
+  isVerified  Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  role        UserRole @default(USER)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  channel     Channel?
+  videos      Video[]
+  comments    Comment[]
+  likes       Like[]
+  subscriptions Subscription[]
+  history     WatchHistory[]
+  watchLater  WatchLater[]
+  playlists   Playlist[]
+  notifications Notification[]
+  sessions    Session[]
+
+  @@index([email])
+  @@index([username])
+  @@index([createdAt])
+}
+
+enum UserRole {
+  USER
+  CREATOR
+  ADMIN
+  MODERATOR
+}
+
+model Channel {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  name        String
+  description String?
+  avatar      String?
+  banner      String?
+  customUrl   String?  @unique
+  isVerified  Boolean  @default(false)
+  isMonetized Boolean  @default(false)
+  subscribers Int      @default(0)
+  totalViews  Int      @default(0)
+  totalVideos Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id])
+  videos Video[]
+  subscriptions Subscription[]
+
+  @@index([name])
+  @@index([subscribers])
+  @@index([totalViews])
+}
+
+model Video {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  channelId   String
+  thumbnail   String?
+  thumbnailMedium String?
+  thumbnailHigh String?
+  duration    Int
+  views       Int      @default(0)
+  likes       Int      @default(0)
+  dislikes    Int      @default(0)
+  comments    Int      @default(0)
+  shares      Int      @default(0)
+  isPublished Boolean  @default(true)
+  isPrivate   Boolean  @default(false)
+  isUnlisted  Boolean  @default(false)
+  isMonetized Boolean  @default(false)
+  category    Category?
+  tags        String[]
+  language    String?
+  license     License  @default(YOUTUBE)
+  madeForKids Boolean  @default(false)
+  allowComments Boolean @default(true)
+  allowRatings Boolean  @default(true)
+  publishDate DateTime @default(now())
+  scheduledDate DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  // Video Processing
+  originalUrl     String
+  hlsUrl          String?
+  status          VideoStatus @default(PROCESSING)
+  processingError String?
+  processedAt     DateTime?
+  encodingProgress Int @default(0)
+  resolution      String?
+  fileSize        BigInt?
+
+  channel    Channel   @relation(fields: [channelId], references: [id])
+  comments   Comment[]
+  likes      Like[]
+  history    WatchHistory[]
+  playlistItems PlaylistItem[]
+  analytics  VideoAnalytics[]
+  watchLater WatchLater[]
+
+  @@index([channelId])
+  @@index([publishDate(sort: Desc)])
+  @@index([views(sort: Desc)])
+  @@index([status])
+  @@index([category])
+  @@index([tags])
+}
+
+enum VideoStatus {
+  UPLOADING
+  PROCESSING
+  ENCODING
+  THUMBNAIL
+  READY
+  FAILED
+  DELETED
+}
+
+enum Category {
+  FILM_ANIMATION
+  AUTOS_VEHICLES
+  MUSIC
+  PETS_ANIMALS
+  SPORTS
+  TRAVEL_EVENTS
+  GAMING
+  PEOPLE_BLOGS
+  COMEDY
+  ENTERTAINMENT
+  NEWS_POLITICS
+  HOWTO_STYLE
+  EDUCATION
+  SCIENCE_TECH
+  NONPROFITS_ACTIVISM
+}
+
+enum License {
+  YOUTUBE
+  CREATIVE_COMMONS
+  STANDARD
+}
+
+model VideoAnalytics {
+  id          String   @id @default(cuid())
+  videoId     String
+  date        DateTime @default(now())
+  views       Int      @default(0)
+  uniqueViews Int      @default(0)
+  likes       Int      @default(0)
+  dislikes    Int      @default(0)
+  shares      Int      @default(0)
+  avgWatchTime Float?
+  completionRate Float?
+  demographics Json?
+  countries   Json?
+  devices     Json?
+  referrers   Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  video Video @relation(fields: [videoId], references: [id])
+
+  @@unique([videoId, date])
+  @@index([date])
+}
+
+model Comment {
+  id          String   @id @default(cuid())
+  content     String
+  userId      String
+  videoId     String
+  parentId    String?
+  isPinned    Boolean  @default(false)
+  isHearted   Boolean  @default(false)
+  likes       Int      @default(0)
+  dislikes    Int      @default(0)
+  isDeleted   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id])
+  video  Video   @relation(fields: [videoId], references: [id])
+  parent Comment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies Comment[] @relation("CommentReplies")
+  likes   CommentLike[]
+
+  @@index([videoId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([parentId])
+}
+
+model CommentLike {
+  id        String   @id @default(cuid())
+  userId    String
+  commentId String
+  isLike    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  comment Comment @relation(fields: [commentId], references: [id])
+
+  @@unique([userId, commentId])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  videoId   String
+  isLike    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  video Video @relation(fields: [videoId], references: [id])
+
+  @@unique([userId, videoId])
+  @@index([videoId])
+  @@index([userId])
+}
+
+model Subscription {
+  id           String   @id @default(cuid())
+  subscriberId String
+  channelId    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subscriber User    @relation("Subscriber", fields: [subscriberId], references: [id])
+  channel    Channel @relation(fields: [channelId], references: [id])
+
+  @@unique([subscriberId, channelId])
+  @@index([channelId])
+  @@index([subscriberId])
+}
+
+model Playlist {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  userId      String
+  isPublic    Boolean  @default(true)
+  isWatchLater Boolean @default(false)
+  thumbnail   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User    @relation(fields: [userId], references: [id])
+  items PlaylistItem[]
+
+  @@index([userId])
+  @@index([isWatchLater])
+}
+
+model PlaylistItem {
+  id         String   @id @default(cuid())
+  playlistId String
+  videoId    String
+  position   Int
+  createdAt  DateTime @default(now())
+
+  playlist Playlist @relation(fields: [playlistId], references: [id])
+  video    Video   @relation(fields: [videoId], references: [id])
+
+  @@unique([playlistId, videoId])
+  @@index([playlistId, position])
+}
+
+model WatchHistory {
+  id           String   @id @default(cuid())
+  userId       String
+  videoId      String
+  progress     Int      @default(0)
+  completed    Boolean  @default(false)
+  lastWatchedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  video Video @relation(fields: [videoId], references: [id])
+
+  @@unique([userId, videoId])
+  @@index([userId, lastWatchedAt(sort: Desc)])
+}
+
+model WatchLater {
+  id        String   @id @default(cuid())
+  userId    String
+  videoId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  video Video @relation(fields: [videoId], references: [id])
+
+  @@unique([userId, videoId])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  readAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([isRead])
+}
+
+enum NotificationType {
+  SUBSCRIPTION
+  COMMENT
+  REPLY
+  LIKE
+  VIDEO_UPLOAD
+  CHANNEL_VERIFICATION
+  MONETIZATION
+  REPORT
+  MENTION
+  LIVE_STREAM
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  reporterId  String
+  type        ReportType
+  reason      ReportReason
+  description String?
+  status      ReportStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  resolvedAt  DateTime?
+  resolvedBy  String?
+
+  reporter User @relation(fields: [reporterId], references: [id])
+  videoId  String?
+  userId   String?
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum ReportType {
+  VIDEO
+  USER
+  COMMENT
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  HATE_SPEECH
+  VIOLENCE
+  COPYRIGHT
+  MISLEADING
+  SEXUAL_CONTENT
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt(sort: Desc)])
+  @@index([action])
+  @@index([resource])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  token      String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  ipAddress  String?
+  userAgent  String?
+  isRevoked  Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([token])
+  @@index([userId, expiresAt])
+}
+
+model EmailVerification {
+  id        String   @id @default(cuid())
+  userId    String
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([token])
+  @@index([userId])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([token])
+  @@index([userId])
+}
